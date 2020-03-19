@@ -77,7 +77,6 @@ class Vae(nn.Module):
 
 
 # DCGAN like architecture
-
 class ConvVAE(nn.Module):
     def __init__(self, opt):
         super(ConvVAE, self).__init__()
