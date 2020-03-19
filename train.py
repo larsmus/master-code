@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
     # load data
     print("Loading data")
-    train_dataloader, _ = get_dataloader(opt)
+    train_dataloader = get_dataloader(opt)
     n = len(train_dataloader.dataset)
 
     # run
