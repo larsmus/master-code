@@ -5,6 +5,7 @@ import os
 from src.load_data import get_dataloader
 from src.vae import Vae, ConvVAE
 import time
+from datetime import datetime
 from torchvision.utils import save_image
 import warnings
 
@@ -81,31 +82,6 @@ def test(dataloader):
     return test_loss
 
 
-# run on both a train and a test dataset
-def run_split():
-    for epoch in range(opt.n_epoch):
-        train_loss, mu, std = train(train_dataloader)
-        test_loss = test(test_dataloader)
-        losses_train.append(train_loss / data_options["n_instances"])
-        losses_test.append(test_loss / data_options["n_test"])
-        print(
-            f"[Epoch {epoch + 1:04}/{opt.n_epoch:04}] [Test loss: {train_loss / data_options['n_instances']:.2f}] "
-            f"[Test loss: {test_loss / data_options['n_test']:.2f}]"
-        )
-        with torch.no_grad():
-            sample = vae.sample(mu, std)
-            os.makedirs(
-                f"./in_out/storage/results/{opt.experiment}_{data_options['n_instances']}",
-                exist_ok=True,
-            )
-            save_image(
-                sample.view(64, 1, opt.resolution, opt.resolution),
-                f"./in_out/storage/results/{opt.experiment}_{data_options['n_instances']}/sample_"
-                + str(epoch)
-                + ".png",
-            )
-
-
 def run():
     for epoch in range(opt.n_epoch):
         train_loss, mu, std = train(train_dataloader)
@@ -115,16 +91,11 @@ def run():
         )
         with torch.no_grad():
             sample = vae.sample(mu, std)
-            os.makedirs(
-                f"./in_out/storage/results/{opt.dataset}_latent_{opt.latent_dim}",
-                exist_ok=True,
-            )
+            os.makedirs(out_path + "/samples", exist_ok=True)
             batch_size = sample.shape[0]
             save_image(
                 sample.view(batch_size, opt.channels, opt.resolution, opt.resolution),
-                f"./in_out/storage/results/{opt.dataset}_latent_{opt.latent_dim}/sample_"
-                + str(epoch)
-                + ".png",
+                out_path + "/samples/" + str(epoch) + ".png",
             )
 
 
@@ -132,6 +103,11 @@ if __name__ == "__main__":
 
     opt = parse()
     torch.manual_seed(opt.seed)
+
+    os.makedirs(f"../results/{opt.dataset}", exist_ok=True)
+    run_id = datetime.now().strftime("%d/%m/%Y-%H:%M:%S")
+    out_path = f"../results/{opt.dataset}/{run_id}"
+    os.makedirs(out_path, exist_ok=True)
 
     # check for GPU
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -151,7 +127,6 @@ if __name__ == "__main__":
     print(f"Done! Total time training: {time.time() - start:.1f} seconds")
 
     # store loss and model
-    os.makedirs("./in_out/storage/models", exist_ok=True)
     torch.save(
         {
             "model": vae,
@@ -160,5 +135,5 @@ if __name__ == "__main__":
             "train_loss": losses_train,
             "opt": opt,
         },
-        f"./in_out/storage/models/vae_{opt.dataset}_latent_{opt.latent_dim}.pt",
+        out_path + "/model.pt",
     )
