@@ -186,8 +186,7 @@ class ConvVAE(nn.Module):
 
     def _decode(self, x):
         # ensure output in [0,1] domain
-        # return torch.sigmoid(self.decode(x))
-        return self.decode(x)
+        return torch.sigmoid(self.decode(x))
 
     def forward(self, x):
         mu, log_std = self._encode(x)
@@ -201,7 +200,7 @@ class ConvVAE(nn.Module):
         z = mu + epsilon * std
         return self.decode(z)
 
-    def loss(self, x, x_reconstructed, mu, log_std, distribution="gaussian"):
+    def loss(self, x, x_reconstructed, mu, log_std, distribution="bernoulli"):
         # Compute ELBO.
         if distribution == "bernoulli":
             # Can use BCE sine we use sigmoid in decoder to output Bernoulli probabilities

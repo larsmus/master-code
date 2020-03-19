@@ -6,10 +6,12 @@ import torch.nn as nn
 
 def transform_data(data, opt):
     data = torch.FloatTensor(data.astype("float"))
-    transform_list = [transforms.ToPILImage(),
-                      transforms.Resize(int(np.sqrt(opt.input_dim))),
-                      transforms.ToTensor(),
-                      transforms.Normalize([0.5], [0.5])]
+    transform_list = [
+        transforms.ToPILImage(),
+        transforms.Resize(int(np.sqrt(opt.input_dim))),
+        transforms.ToTensor(),
+        transforms.Normalize([0.5], [0.5]),
+    ]
 
     transform = transforms.Compose(transform_list)
     return transform(data)

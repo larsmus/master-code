@@ -37,7 +37,7 @@ def get_dataloader(opt):
         )
 
     elif opt.dataset == "dsprites":
-        path = "../data/dsprites-dataset/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz"
+        path = "../data/dsprites_ndarray_co1sh3sc6or40x32y32_64x64.npz"
         data = SpritesDataset(path)
         dataloader_train = DataLoader(data, batch_size=opt.batch_size, shuffle=True)
 
