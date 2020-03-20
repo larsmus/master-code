@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
-from src.utils import View
+from utils import View
 
 
 # Simple VAE model with fully connected MLP structure with one hidden layer

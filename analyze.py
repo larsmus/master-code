@@ -6,7 +6,7 @@ import os
 import seaborn as sns
 import numpy as np
 from torch.utils.data import DataLoader
-from in_out.load_data import CustomDataset
+from load_data import CustomDataset
 import torch
 from torchvision.utils import save_image
 

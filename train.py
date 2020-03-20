@@ -2,8 +2,8 @@ import torch
 from torch import optim
 import argparse
 import os
-from src.load_data import get_dataloader
-from src.vae import Vae, ConvVAE
+from load_data import get_dataloader
+from vae import Vae, ConvVAE
 import time
 from datetime import datetime
 from torchvision.utils import save_image
