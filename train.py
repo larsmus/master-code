@@ -105,7 +105,7 @@ if __name__ == "__main__":
     torch.manual_seed(opt.seed)
 
     os.makedirs(f"../results/{opt.dataset}", exist_ok=True)
-    run_id = datetime.now().strftime("%d/%m/%Y-%H:%M:%S")
+    run_id = datetime.now().strftime("%d-%m-%Y,%H-%M-%S")
     out_path = f"../results/{opt.dataset}/{run_id}"
     os.makedirs(out_path, exist_ok=True)
 
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     # store loss and model
     torch.save(
         {
-            "model": vae,
+            "model": vae.state_dict(),
             "mu": vae.mu,
             "std": vae.std,
             "train_loss": losses_train,
