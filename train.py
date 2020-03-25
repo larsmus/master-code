@@ -50,6 +50,8 @@ def parse():
     parser.add_argument(
         "--beta_regularizer", type=float, default=1.0, help="Regularizer in beta-VAE"
     )
+    parser.add_argument("--test", type=int, default=0, help="Use test set or not. 1 or 0")
+    parser.add_argument("--store-samples", type=int, default=0, help="If store samples during training. 1 or 0")
     return parser.parse_args()
 
 
@@ -85,18 +87,21 @@ def test(dataloader):
 def run():
     for epoch in range(opt.n_epoch):
         train_loss, mu, std = train(train_dataloader)
+        if bool(opt.test):
+            losses_test.append(test(test_dataloader))
         losses_train.append(train_loss / n)
         print(
             f"[Epoch {epoch + 1:04}/{opt.n_epoch:04}] [Train loss: {train_loss / n:.2f}]"
         )
-        with torch.no_grad():
-            sample = vae.sample(mu, std)
-            os.makedirs(out_path + "/samples", exist_ok=True)
-            batch_size = sample.shape[0]
-            save_image(
-                sample.view(batch_size, opt.channels, opt.resolution, opt.resolution),
-                out_path + "/samples/" + str(epoch) + ".png",
-            )
+        if opt.store_samples:
+            with torch.no_grad():
+                sample = vae.sample(mu, std)
+                os.makedirs(out_path + "/samples", exist_ok=True)
+                batch_size = sample.shape[0]
+                save_image(
+                    sample.view(batch_size, opt.channels, opt.resolution, opt.resolution),
+                    out_path + "/samples/" + str(epoch) + ".png",
+                )
 
 
 if __name__ == "__main__":
@@ -106,7 +111,7 @@ if __name__ == "__main__":
 
     os.makedirs(f"../results/{opt.dataset}", exist_ok=True)
     run_id = datetime.now().strftime("%d-%m-%Y,%H-%M-%S")
-    out_path = f"../results/{opt.dataset}/{run_id}"
+    out_path = f"../results/{opt.dataset}/{run_id}/beta_{opt.beta_regularizer}"
     os.makedirs(out_path, exist_ok=True)
 
     # check for GPU
@@ -115,6 +120,7 @@ if __name__ == "__main__":
     # load data
     print("Loading data")
     train_dataloader = get_dataloader(opt)
+    test_dataloader = None
     n = len(train_dataloader.dataset)
 
     # run
@@ -123,6 +129,7 @@ if __name__ == "__main__":
     vae = ConvVAE(opt).to(device)
     optimizer = optim.Adam(vae.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
     losses_train = []
+    losses_test = []
     run()
     print(f"Done! Total time training: {time.time() - start:.1f} seconds")
 
