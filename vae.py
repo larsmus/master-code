@@ -202,21 +202,30 @@ class ConvVAE(nn.Module):
 
     def loss(self, x, x_reconstructed, mu, log_std, distribution="bernoulli"):
         # Compute ELBO.
+        batch_size = x.size(0)
         if distribution == "bernoulli":
             # Can use BCE sine we use sigmoid in decoder to output Bernoulli probabilities
             reconstruction = F.binary_cross_entropy(
-                x_reconstructed, x.view(-1, self.opt.input_dim), size_average=False
+                x_reconstructed, x.view(-1, self.opt.input_dim), reduction="sum"
             )
+
         elif distribution == "gaussian":
             reconstruction = F.mse_loss(
-                x_reconstructed, x.view(-1, self.opt.input_dim), size_average=False
-            )
+                x_reconstructed * 255, x.view(-1, self.opt.input_dim) * 255, reduction="sum"
+            ) / 255
+
+        else:
+            raise ValueError("Unknown distribution")
+
+        reconstruction = reconstruction / batch_size
 
         # KL term regularizing between variational distribution and prior. Using closed form.
         # See https://arxiv.org/pdf/1312.6114.pdf Appendix B and C for details.
-        KL_regularizer = -0.5 * torch.sum(1 + log_std - mu.pow(2) - log_std.exp())
-        loss = reconstruction + self.opt.beta_regularizer * KL_regularizer
-        return loss
+        kld = -0.5 * (1 + log_std - mu.pow(2) - log_std.exp())
+        total_kld = kld.sum(1).mean(0, True)
+        dim_kld = kld.sum(0)
+        loss = reconstruction + self.opt.beta_regularizer * total_kld
+        return loss, dim_kld
 
 
 def reparameterize(mu, log_std):

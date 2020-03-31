@@ -58,18 +58,20 @@ def parse():
 def train(dataloader):
     vae.train()
     train_loss = 0
+    dimension_kld_sum = torch.zeros(10, device=device)
     for batch_idx, data in enumerate(dataloader):
         if torch.cuda.is_available():
             data = data.cuda()
         data = data.view(opt.batch_size, opt.channels, opt.resolution, opt.resolution)
         reconstruction, mu, std = vae(data)
-        loss_value = vae.loss(data, reconstruction, mu, std)
+        loss_value, dim_kld_batch = vae.loss(data, reconstruction, mu, std)
+        dimension_kld_sum += dim_kld_batch
         optimizer.zero_grad()
         loss_value.backward()
         train_loss += loss_value.item()
         optimizer.step()
 
-    return train_loss, mu, std
+    return train_loss, mu, std, dimension_kld_sum
 
 
 def test(dataloader):
@@ -85,8 +87,10 @@ def test(dataloader):
 
 
 def run():
+
     for epoch in range(opt.n_epoch):
-        train_loss, mu, std = train(train_dataloader)
+        train_loss, mu, std, dimension_kld_sum = train(train_dataloader)
+        dimension_kld = dimension_kld_sum / n
         if bool(opt.test):
             losses_test.append(test(test_dataloader))
         losses_train.append(train_loss / n)
@@ -95,13 +99,15 @@ def run():
         )
         if opt.store_samples:
             with torch.no_grad():
-                sample = vae.sample(mu, std)
+                sample, dim = vae.sample(mu, std)
                 os.makedirs(out_path + "/samples", exist_ok=True)
                 batch_size = sample.shape[0]
                 save_image(
                     sample.view(batch_size, opt.channels, opt.resolution, opt.resolution),
                     out_path + "/samples/" + str(epoch) + ".png",
                 )
+
+    return dimension_kld
 
 
 if __name__ == "__main__":
@@ -110,8 +116,8 @@ if __name__ == "__main__":
     torch.manual_seed(opt.seed)
 
     os.makedirs(f"../results/{opt.dataset}", exist_ok=True)
-    run_id = datetime.now().strftime("%d-%m-%Y,%H-%M-%S")
-    out_path = f"../results/{opt.dataset}/{run_id}/beta_{opt.beta_regularizer}"
+    # run_id = datetime.now().strftime("%d-%m-%Y,%H-%M-%S")
+    out_path = f"../results/{opt.dataset}/betas/beta_{opt.beta_regularizer}"
     os.makedirs(out_path, exist_ok=True)
 
     # check for GPU
@@ -130,7 +136,7 @@ if __name__ == "__main__":
     optimizer = optim.Adam(vae.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
     losses_train = []
     losses_test = []
-    run()
+    dimension_kld = run()
     print(f"Done! Total time training: {time.time() - start:.1f} seconds")
 
     # store loss and model
@@ -141,6 +147,9 @@ if __name__ == "__main__":
             "std": vae.std,
             "train_loss": losses_train,
             "opt": opt,
+            "dim_kld": dimension_kld,
         },
         out_path + "/model.pt",
     )
+
+    print(out_path)
