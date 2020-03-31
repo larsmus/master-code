@@ -50,8 +50,15 @@ def parse():
     parser.add_argument(
         "--beta_regularizer", type=float, default=1.0, help="Regularizer in beta-VAE"
     )
-    parser.add_argument("--test", type=int, default=0, help="Use test set or not. 1 or 0")
-    parser.add_argument("--store-samples", type=int, default=0, help="If store samples during training. 1 or 0")
+    parser.add_argument(
+        "--test", type=int, default=0, help="Use test set or not. 1 or 0"
+    )
+    parser.add_argument(
+        "--store-samples",
+        type=int,
+        default=0,
+        help="If store samples during training. 1 or 0",
+    )
     return parser.parse_args()
 
 
@@ -103,7 +110,9 @@ def run():
                 os.makedirs(out_path + "/samples", exist_ok=True)
                 batch_size = sample.shape[0]
                 save_image(
-                    sample.view(batch_size, opt.channels, opt.resolution, opt.resolution),
+                    sample.view(
+                        batch_size, opt.channels, opt.resolution, opt.resolution
+                    ),
                     out_path + "/samples/" + str(epoch) + ".png",
                 )
 

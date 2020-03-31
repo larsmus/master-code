@@ -210,9 +210,14 @@ class ConvVAE(nn.Module):
             )
 
         elif distribution == "gaussian":
-            reconstruction = F.mse_loss(
-                x_reconstructed * 255, x.view(-1, self.opt.input_dim) * 255, reduction="sum"
-            ) / 255
+            reconstruction = (
+                F.mse_loss(
+                    x_reconstructed * 255,
+                    x.view(-1, self.opt.input_dim) * 255,
+                    reduction="sum",
+                )
+                / 255
+            )
 
         else:
             raise ValueError("Unknown distribution")
