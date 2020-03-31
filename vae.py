@@ -3,9 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from utils import View
+import numpy as np
 
 
 # Simple VAE model with fully connected MLP structure with one hidden layer
+
 
 class Vae(nn.Module):
     def __init__(self, opt):
@@ -79,63 +81,81 @@ class ConvVAE(nn.Module):
         kernel_size = 4
         hidden_dim = 256
         # Shape required to start transpose convs
-        reshape = (opt.channels, kernel_size, kernel_size)
-        cnn_kwars = dict(stride=2, padding=1)
+        reshape = (hid_channels, kernel_size, kernel_size)
+        cnn_kwargs = dict(stride=2, padding=1)
 
         self.encode = nn.Sequential(
             nn.Conv2d(
                 in_channels=opt.channels,
-                out_channels=32,
-                kernel_size=4,
-                stride=2,
-                padding=1,
+                out_channels=hid_channels,
+                kernel_size=kernel_size,
+                **cnn_kwargs
             ),
             nn.ReLU(inplace=True),
             nn.Conv2d(
-                in_channels=hid_channels, out_channels=hid_channels, kernel_size=kernel_size, **cnn_kwars
+                in_channels=hid_channels,
+                out_channels=hid_channels,
+                kernel_size=kernel_size,
+                **cnn_kwargs
             ),
             nn.ReLU(inplace=True),
             nn.Conv2d(
-                in_channels=hid_channels, out_channels=hid_channels, kernel_size=kernel_size, **cnn_kwars
+                in_channels=hid_channels,
+                out_channels=hid_channels,
+                kernel_size=kernel_size,
+                **cnn_kwargs
             ),
             nn.ReLU(inplace=True),
             nn.Conv2d(
-                in_channels=hid_channels, out_channels=hid_channels, kernel_size=kernel_size, **cnn_kwars
+                in_channels=hid_channels,
+                out_channels=hid_channels,
+                kernel_size=kernel_size,
+                **cnn_kwargs
             ),
             nn.ReLU(inplace=True),
-            nn.Conv2d(
-                in_channels=hid_channels, out_channels=hid_channels, kernel_size=kernel_size, **cnn_kwars
-            ),
+            View((opt.batch_size, -1)),
+            nn.Linear(in_features=np.product(reshape), out_features=hidden_dim),
             nn.ReLU(inplace=True),
-            View((-1, 256 * 1 * 1)),
-            nn.Linear(in_features=256, out_features=opt.latent_dim * 2),
+            nn.Linear(in_features=hidden_dim, out_features=hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(in_features=hidden_dim, out_features=opt.latent_dim * 2),
         )
 
         self.decode = nn.Sequential(
-            nn.Linear(in_features=opt.latent_dim, out_features=256),
-            View((-1, 256, 1, 1)),
+            nn.Linear(in_features=opt.latent_dim, out_features=hidden_dim),
             nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(in_channels=256, out_channels=64, kernel_size=4),
+            nn.Linear(in_features=hidden_dim, out_features=hidden_dim),
             nn.ReLU(inplace=True),
+            nn.Linear(in_features=hidden_dim, out_features=np.product(reshape)),
+            nn.ReLU(inplace=True),
+            View((-1, *reshape)),
             nn.ConvTranspose2d(
-                in_channels=64, out_channels=64, kernel_size=4, stride=2, padding=1
+                in_channels=hid_channels,
+                out_channels=hid_channels,
+                kernel_size=kernel_size,
+                **cnn_kwargs
             ),
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(
-                in_channels=64, out_channels=32, kernel_size=4, stride=2, padding=1
+                in_channels=hid_channels,
+                out_channels=hid_channels,
+                kernel_size=kernel_size,
+                **cnn_kwargs
             ),
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(
-                in_channels=32, out_channels=32, kernel_size=4, stride=2, padding=1
+                in_channels=hid_channels,
+                out_channels=hid_channels,
+                kernel_size=kernel_size,
+                **cnn_kwargs
             ),
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(
-                in_channels=32,
+                in_channels=hid_channels,
                 out_channels=opt.channels,
-                kernel_size=4,
-                stride=2,
-                padding=1,
-            ),
+                kernel_size=kernel_size,
+                **cnn_kwargs
+            )
         )
 
         self.opt = opt

@@ -67,13 +67,13 @@ def train(dataloader):
     train_loss = 0
     dimension_kld_sum = torch.zeros(10, device=device)
     for batch_idx, data in enumerate(dataloader):
+        optimizer.zero_grad()
         if torch.cuda.is_available():
             data = data.cuda()
         data = data.view(opt.batch_size, opt.channels, opt.resolution, opt.resolution)
         reconstruction, mu, std = vae(data)
         loss_value, dim_kld_batch = vae.loss(data, reconstruction, mu, std)
         dimension_kld_sum += dim_kld_batch
-        optimizer.zero_grad()
         loss_value.backward()
         train_loss += loss_value.item()
         optimizer.step()
@@ -161,5 +161,3 @@ if __name__ == "__main__":
         },
         out_path + "/model.pt",
     )
-
-    print(out_path)
