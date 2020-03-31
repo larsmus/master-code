@@ -7,43 +7,6 @@ from utils import View
 
 # Simple VAE model with fully connected MLP structure with one hidden layer
 
-
-class Encoder(nn.Module):
-    def __init__(self, opt):
-        super(Encoder, self).__init__()
-        self.input_dim = opt.input_dim
-        # define architecture
-        self.fc1 = nn.Linear(opt.input_dim, opt.hidden_dim)
-        self.fc2 = nn.Linear(opt.hidden_dim, opt.hidden_dim)
-        self.fc21 = nn.Linear(opt.hidden_dim, opt.latent_dim)
-        self.fc22 = nn.Linear(opt.hidden_dim, opt.latent_dim)
-
-    def forward(self, x):
-        x = x.reshape(-1, self.input_dim)
-        hidden = F.relu(self.fc1(x))
-        hidden = F.relu(self.fc2(hidden))
-        # compute the mean and standard deviation each size 'batch size x z_dim'
-        z_loc = self.fc21(hidden)
-        z_scale = self.fc22(hidden)
-        return z_loc, z_scale
-
-
-class Decoder(nn.Module):
-    def __init__(self, opt):
-        super(Decoder, self).__init__()
-
-        # define architecture
-        self.fc1 = nn.Linear(opt.latent_dim, opt.hidden_dim)
-        self.fc2 = nn.Linear(opt.hidden_dim, opt.hidden_dim)
-        self.fc3 = nn.Linear(opt.hidden_dim, opt.input_dim)
-
-    def forward(self, x):
-        hidden = F.relu(self.fc1(x))
-        hidden = F.relu(self.fc2(hidden))
-        # ensure output in [0,1] domain
-        return torch.sigmoid(self.fc3(hidden))
-
-
 class Vae(nn.Module):
     def __init__(self, opt):
         super(Vae, self).__init__()
@@ -112,6 +75,13 @@ class ConvVAE(nn.Module):
     def __init__(self, opt):
         super(ConvVAE, self).__init__()
 
+        hid_channels = 32
+        kernel_size = 4
+        hidden_dim = 256
+        # Shape required to start transpose convs
+        reshape = (opt.channels, kernel_size, kernel_size)
+        cnn_kwars = dict(stride=2, padding=1)
+
         self.encode = nn.Sequential(
             nn.Conv2d(
                 in_channels=opt.channels,
@@ -122,18 +92,20 @@ class ConvVAE(nn.Module):
             ),
             nn.ReLU(inplace=True),
             nn.Conv2d(
-                in_channels=32, out_channels=32, kernel_size=4, stride=2, padding=1
+                in_channels=hid_channels, out_channels=hid_channels, kernel_size=kernel_size, **cnn_kwars
             ),
             nn.ReLU(inplace=True),
             nn.Conv2d(
-                in_channels=32, out_channels=64, kernel_size=4, stride=2, padding=1
+                in_channels=hid_channels, out_channels=hid_channels, kernel_size=kernel_size, **cnn_kwars
             ),
             nn.ReLU(inplace=True),
             nn.Conv2d(
-                in_channels=64, out_channels=64, kernel_size=4, stride=2, padding=1
+                in_channels=hid_channels, out_channels=hid_channels, kernel_size=kernel_size, **cnn_kwars
             ),
             nn.ReLU(inplace=True),
-            nn.Conv2d(in_channels=64, out_channels=256, kernel_size=4, stride=1),
+            nn.Conv2d(
+                in_channels=hid_channels, out_channels=hid_channels, kernel_size=kernel_size, **cnn_kwars
+            ),
             nn.ReLU(inplace=True),
             View((-1, 256 * 1 * 1)),
             nn.Linear(in_features=256, out_features=opt.latent_dim * 2),
