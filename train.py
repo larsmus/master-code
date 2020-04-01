@@ -3,7 +3,7 @@ from torch import optim
 import argparse
 import os
 from load_data import get_dataloader
-from vae import Vae, ConvVAE
+from vae import Vae, ConvVAE, kaiming_init
 import time
 from datetime import datetime
 from torchvision.utils import save_image
@@ -36,7 +36,7 @@ def parse():
     parser.add_argument(
         "--latent_dim", type=int, default=10, help="dimension of latent space"
     )
-    parser.add_argument("--lr", type=float, default=0.0001, help="learning rate")
+    parser.add_argument("--lr", type=float, default=0.0005, help="learning rate")
     parser.add_argument("--b1", type=float, default=0.9, help="parameter in Adam")
     parser.add_argument("--b2", type=float, default=0.999, help="parameter in Adam")
     parser.add_argument(
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     os.makedirs(f"../results/{opt.dataset}", exist_ok=True)
     # run_id = datetime.now().strftime("%d-%m-%Y,%H-%M-%S")
     # out_path = f"../results/{opt.dataset}/{run_id}"
-    out_path = f"../results/{opt.dataset}/betas/beta_{opt.beta_regularizer}"
+    out_path = f"../results/{opt.dataset}/betas_lr/beta_{opt.beta_regularizer}"
     os.makedirs(out_path, exist_ok=True)
 
     # check for GPU
