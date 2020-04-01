@@ -50,7 +50,7 @@ def get_dataloader(opt):
 class SpritesDataset(Dataset):
     def __init__(self, dataset_path):
         dataset_zip = np.load(dataset_path, encoding='latin1')
-        self.imgs = dataset_zip['imgs']
+        self.imgs = dataset_zip['imgs'][:64]
 
     def __len__(self):
         return self.imgs.shape[0]

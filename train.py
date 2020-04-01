@@ -125,9 +125,9 @@ if __name__ == "__main__":
     torch.manual_seed(opt.seed)
 
     os.makedirs(f"../results/{opt.dataset}", exist_ok=True)
-    run_id = datetime.now().strftime("%d-%m-%Y,%H-%M-%S")
-    out_path = f"../results/{opt.dataset}/{run_id}"
-    # out_path = f"../results/{opt.dataset}/betas/beta_{opt.beta_regularizer}"
+    # run_id = datetime.now().strftime("%d-%m-%Y,%H-%M-%S")
+    # out_path = f"../results/{opt.dataset}/{run_id}"
+    out_path = f"../results/{opt.dataset}/betas/beta_{opt.beta_regularizer}"
     os.makedirs(out_path, exist_ok=True)
 
     # check for GPU

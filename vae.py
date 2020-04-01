@@ -113,7 +113,7 @@ class ConvVAE(nn.Module):
                 **cnn_kwargs
             ),
             nn.ReLU(inplace=True),
-            View((opt.batch_size, -1)),
+            View((-1, np.product(reshape))),
             nn.Linear(in_features=np.product(reshape), out_features=hidden_dim),
             nn.ReLU(inplace=True),
             nn.Linear(in_features=hidden_dim, out_features=hidden_dim),
