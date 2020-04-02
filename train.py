@@ -3,7 +3,7 @@ from torch import optim
 import argparse
 import os
 from load_data import get_dataloader
-from vae import Vae, ConvVAE, kaiming_init
+from vae import Vae, ConvVAE
 import time
 from datetime import datetime
 from torchvision.utils import save_image
@@ -62,7 +62,7 @@ def parse():
     return parser.parse_args()
 
 
-def train(dataloader):
+def train(dataloader, epoch):
     vae.train()
     train_loss = 0
     dimension_kld_sum = torch.zeros(10, device=device)
@@ -72,7 +72,7 @@ def train(dataloader):
             data = data.cuda()
         data = data.view(opt.batch_size, opt.channels, opt.resolution, opt.resolution)
         reconstruction, mu, std = vae(data)
-        loss_value, dim_kld_batch = vae.loss(data, reconstruction, mu, std)
+        loss_value, dim_kld_batch = vae.loss(data, reconstruction, mu, std, epoch, annealing=True)
         dimension_kld_sum += dim_kld_batch
         loss_value.backward()
         train_loss += loss_value.item()
@@ -94,10 +94,8 @@ def test(dataloader):
 
 
 def run():
-
     for epoch in range(opt.n_epoch):
-        train_loss, mu, std, dimension_kld_sum = train(train_dataloader)
-        dimension_kld = dimension_kld_sum / n
+        train_loss, mu, std, dimension_kld_sum = train(train_dataloader, epoch=epoch)
         if bool(opt.test):
             losses_test.append(test(test_dataloader))
         losses_train.append(train_loss / n)
@@ -116,7 +114,7 @@ def run():
                     out_path + "/samples/" + str(epoch) + ".png",
                 )
 
-    return dimension_kld
+    return dimension_kld_sum / n
 
 
 if __name__ == "__main__":
@@ -127,7 +125,7 @@ if __name__ == "__main__":
     os.makedirs(f"../results/{opt.dataset}", exist_ok=True)
     # run_id = datetime.now().strftime("%d-%m-%Y,%H-%M-%S")
     # out_path = f"../results/{opt.dataset}/{run_id}"
-    out_path = f"../results/{opt.dataset}/betas_lr/beta_{opt.beta_regularizer}"
+    out_path = f"../results/{opt.dataset}/beta_annealing_2/beta_{opt.beta_regularizer}"
     os.makedirs(out_path, exist_ok=True)
 
     # check for GPU

@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.nn.init as init
 from utils import View
 import numpy as np
 
@@ -65,11 +64,6 @@ class Vae(nn.Module):
         # See https://arxiv.org/pdf/1312.6114.pdf Appendix B and C for details.
         KL_regularizer = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         return reconstruction + KL_regularizer
-
-    def weight_init(self):
-        for block in self._modules:
-            for m in self._modules[block]:
-                kaiming_init(m)
 
 
 # DCGAN like architecture
@@ -186,7 +180,7 @@ class ConvVAE(nn.Module):
         z = mu + epsilon * std
         return self.decode(z)
 
-    def loss(self, x, x_reconstructed, mu, log_std, distribution="bernoulli"):
+    def loss(self, x, x_reconstructed, mu, log_std, epoch, distribution="bernoulli", annealing=False):
         # Compute ELBO.
         batch_size = x.size(0)
         if distribution == "bernoulli":
@@ -215,7 +209,8 @@ class ConvVAE(nn.Module):
         kld = -0.5 * (1 + log_std - mu.pow(2) - log_std.exp())
         total_kld = kld.sum(1).mean(0, True)
         dim_kld = kld.sum(0)
-        loss = reconstruction + self.opt.beta_regularizer * total_kld
+        anneal_reg = linear_annealing(1, self.opt.beta_regularizer, epoch, self.opt.n_epoch) if annealing else 1
+        loss = reconstruction + anneal_reg * total_kld
         return loss, dim_kld
 
 
@@ -223,4 +218,14 @@ def reparameterize(mu, log_std):
     std = torch.exp(0.5 * log_std)
     epsilon = torch.randn_like(std)
     return mu + epsilon * std
+
+
+def linear_annealing(initial, final, step, annealing_steps):
+    if annealing_steps == 0:
+        return final
+    assert final > initial
+    delta = final - initial
+    annealed = min(initial + delta * step / annealing_steps, final)
+    return annealed
+
 
