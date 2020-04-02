@@ -14,51 +14,58 @@ warnings.filterwarnings("ignore")
 
 def parse():
     parser = argparse.ArgumentParser(description="VAE")
-    parser.add_argument(
+
+    general = parser.add_argument_group("General options")
+    general.add_argument(
         "--dataset", type=str, default="dsprites", help="which dataset to run"
     )
-    parser.add_argument(
-        "--experiment",
-        type=str,
-        default="triangles",
-        help="which experiment if polygons",
-    )
-    parser.add_argument(
-        "--batch_size", type=int, default=64, help="number of datapoints in each batch"
-    )
-    parser.add_argument("--n_epoch", type=int, default=100, help="number of epochs")
-    parser.add_argument(
-        "--resolution", type=int, default=64, help="resolution of image"
-    )
-    parser.add_argument(
-        "--input_dim", type=int, default=64 * 64, help="dimension of input space"
-    )
-    parser.add_argument(
-        "--latent_dim", type=int, default=10, help="dimension of latent space"
-    )
-    parser.add_argument("--lr", type=float, default=0.0005, help="learning rate")
-    parser.add_argument("--b1", type=float, default=0.9, help="parameter in Adam")
-    parser.add_argument("--b2", type=float, default=0.999, help="parameter in Adam")
-    parser.add_argument(
+    general.add_argument(
         "--log_interval", type=int, default=10, help="Interval to log loss"
     )
-    parser.add_argument(
-        "--hidden_dim", type=int, default=400, help="hidden units in 3 layer MLP"
-    )
-    parser.add_argument("--seed", type=int, default=123, help="Seed")
-    parser.add_argument("--channels", type=str, default=1, help="Number of channels")
-    parser.add_argument(
-        "--beta_regularizer", type=float, default=1.0, help="Regularizer in beta-VAE"
-    )
-    parser.add_argument(
+    general.add_argument("--seed", type=int, default=123, help="Seed")
+    general.add_argument(
         "--test", type=int, default=0, help="Use test set or not. 1 or 0"
     )
-    parser.add_argument(
+    general.add_argument(
         "--store-samples",
         type=int,
         default=0,
         help="If store samples during training. 1 or 0",
     )
+
+    training = parser.add_argument_group("Training options")
+    training.add_argument(
+        "--batch_size", type=int, default=64, help="number of datapoints in each batch"
+    )
+    training.add_argument("--n_epoch", type=int, default=100, help="number of epochs")
+    training.add_argument("--lr", type=float, default=0.0005, help="learning rate")
+    training.add_argument("--b1", type=float, default=0.9, help="parameter in Adam")
+    training.add_argument("--b2", type=float, default=0.999, help="parameter in Adam")
+
+    model = parser.add_argument_group("Model options")
+    model.add_argument(
+        "--resolution", type=int, default=64, help="resolution of image"
+    )
+    model.add_argument(
+        "--input_dim", type=int, default=64 * 64, help="dimension of input space"
+    )
+    model.add_argument(
+        "--latent_dim", type=int, default=10, help="dimension of latent space"
+    )
+    model.add_argument("--channels", type=int, default=1, help="Number of channels")
+    model.add_argument("--loss", type=str, default="vae", help="Which loss function to use")
+
+    beta_vae_1 = parser.add_argument_group("Loss options for beta-vae, first version")
+    beta_vae_1.add_argument(
+        "--beta_regularizer", type=float, default=1.0, help="beta in beta-VAE"
+    )
+    beta_vae_1.add_argument("--beta_annealing", type=int, default=0, help="Use annealing on beta or not")
+
+    beta_vae_2 = parser.add_argument_group("Loss options for beta-vae, second version")
+    beta_vae_2.add_argument_group("--gamma", type=float, default=100, help="Regularizer on KL term")
+    beta_vae_2.add_argument_group("--C_initial", type=float, default=100, help="Initial capacity")
+    beta_vae_2.add_argument_group("--C_final", type=float, default=100, help="Final capacity")
+
     return parser.parse_args()
 
 
@@ -125,7 +132,7 @@ if __name__ == "__main__":
     os.makedirs(f"../results/{opt.dataset}", exist_ok=True)
     # run_id = datetime.now().strftime("%d-%m-%Y,%H-%M-%S")
     # out_path = f"../results/{opt.dataset}/{run_id}"
-    out_path = f"../results/{opt.dataset}/beta_annealing_2/beta_{opt.beta_regularizer}"
+    out_path = f"../results/{opt.dataset}/test/beta_{opt.beta_regularizer}"
     os.makedirs(out_path, exist_ok=True)
 
     # check for GPU
