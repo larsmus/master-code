@@ -50,7 +50,7 @@ def parse():
 
     model = parser.add_argument_group("Model options")
     model.add_argument(
-        "--model", type=str, default="factor_vae", help="which model to run"
+        "--model", type=str, default="btc_vae", help="which model to run"
     )
     model.add_argument(
         "--resolution", type=int, default=64, help="resolution of image"
@@ -81,6 +81,9 @@ def parse():
     factor_vae.add_argument("--lrd", type=float, default=0.0001, help="learning rate")
     factor_vae.add_argument("--b1d", type=float, default=0.5, help="parameter in Adam")
     factor_vae.add_argument("--b2d", type=float, default=0.9, help="parameter in Adam")
+
+    btc_vae = parser.add_argument_group("Loss options for bet-tc-vae")
+    btc_vae.add_argument("--btc_regularizer", type=int, default=5, help="Regularizer on TC term")
     return parser.parse_args()
 
 
@@ -109,7 +112,7 @@ def train(dataloader):
             d_loss.backward()
             optimizer_d.step()
 
-        dimension_kld_batch = dimension_kld(mu, std)
+        dimension_kld_batch = dimension_kld(mu, logvar)
         dimension_kld_sum += dimension_kld_batch
 
         optimizer.step()
@@ -123,8 +126,8 @@ def test(dataloader):
     with torch.no_grad():
         for batch_idx, data in enumerate(dataloader):
             data = data.to(device)
-            reconstruction, mu, std = vae(data)
-            loss_value = vae.loss(data, reconstruction, mu, std)
+            reconstruction, mu, logvar = vae(data)
+            loss_value = vae.loss(data, reconstruction, mu, logvar)
             test_loss += loss_value.item()
     return test_loss
 
@@ -203,7 +206,7 @@ if __name__ == "__main__":
         {
             "model": vae.state_dict(),
             "mu": vae.mu,
-            "std": vae.std,
+            "logvar": vae.logvar,
             "train_loss": losses_train,
             "opt": opt,
             "dim_kld": dimension_kld,

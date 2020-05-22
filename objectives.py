@@ -1,14 +1,17 @@
 import torch.nn.functional as F
 import torch
+import math
 
 
-def get_loss(x, x_reconstructed, mu, log_std, opt, z,  discriminator, count=1):
+def get_loss(x, x_reconstructed, mu, logvar, opt, z, discriminator, count=1):
     if opt.model == "vae":
-        return vae_objective(x, x_reconstructed, mu, log_std, opt, count)
+        return _vae_objective(x, x_reconstructed, mu, logvar, opt, count)
     elif opt.model == "b_vae_2":
-        return b_vae_objective2(x, x_reconstructed, mu, log_std, opt, count)
+        return _b_vae_objective2(x, x_reconstructed, mu, logvar, opt, count)
     elif opt.model == "factor_vae":
-        return factor_vae_objective(x, x_reconstructed, mu, log_std, opt, discriminator, z, count)
+        return _factor_vae_objective(x, x_reconstructed, mu, logvar, opt, discriminator, z, count)
+    elif opt.model == "btc_vae":
+        return _btc_vae_objective(x, x_reconstructed, mu, logvar, opt, z, count)
     else:
         raise NotImplementedError("Unknown loss function")
 
@@ -31,30 +34,30 @@ def _reconstruction(x, x_reconstructed, opt, distribution="bernoulli"):
         raise ValueError("Unknown distribution")
 
 
-def kl_divergence(mu, log_std):
-    kld = -0.5 * (1 + log_std - mu.pow(2) - log_std.exp())
+def _kl_divergence(mu, logvar):
+    kld = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
     return kld.sum(1).mean(0, True)
 
 
-def dimension_kld(mu, log_std):
-    kld = -0.5 * (1 + log_std - mu.pow(2) - log_std.exp())
+def dimension_kld(mu, logvar):
+    kld = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
     return kld.sum(0)
 
 
-def vae_objective(x, x_reconstructed, mu, log_std, opt, count):
-    annealing_c = linear_annealing(opt.C_initial, opt.C_final, count, opt.annealing_steps)
-    return _reconstruction(x, x_reconstructed, opt) + annealing_c * opt.beta_regularizer * kl_divergence(mu, log_std)
+def _vae_objective(x, x_reconstructed, mu, logvar, opt, count):
+    annealing_c = _linear_annealing(opt.C_initial, opt.C_final, count, opt.annealing_steps)
+    return _reconstruction(x, x_reconstructed, opt) + annealing_c * opt.beta_regularizer * _kl_divergence(mu, logvar)
 
 
-def b_vae_objective2(x, x_reconstructed, mu, log_std, opt, count):
-    annealing_c = linear_annealing(opt.C_initial, opt.C_final, count, opt.annealing_steps)
-    return _reconstruction(x, x_reconstructed, opt) + opt.gamma * (kl_divergence(mu, log_std) - annealing_c).abs()
+def _b_vae_objective2(x, x_reconstructed, mu, logvar, opt, count):
+    annealing_c = _linear_annealing(opt.C_initial, opt.C_final, count, opt.annealing_steps)
+    return _reconstruction(x, x_reconstructed, opt) + opt.gamma * (_kl_divergence(mu, logvar) - annealing_c).abs()
 
 
-def factor_vae_objective(x, x_reconstructed, mu, log_std, opt, discriminator, z, count):
+def _factor_vae_objective(x, x_reconstructed, mu, logvar, opt, discriminator, z, count):
     log_probability = discriminator(z)
     total_correlation = (log_probability[:, :1] - log_probability[:, 1:]).mean()
-    return vae_objective(x, x_reconstructed, mu, log_std, opt, count) + opt.factor_regularizer * total_correlation
+    return _vae_objective(x, x_reconstructed, mu, logvar, opt, count) + opt.factor_regularizer * total_correlation
 
 
 def factor_vae_discriminator_loss(z, discriminator, dataloader, vae, opt, device):
@@ -86,28 +89,61 @@ def _permute_dims(z):
     return torch.cat(z_permute, 1)
 
 
-def btc_vae_objective(x, x_reconstructed, mu, log_std, opt, z, count):
-    elbo = vae_objective(x, x_reconstructed, mu, log_std, opt, count)
+def _btc_vae_objective(x, x_reconstructed, mu, logvar, opt, z, count):
+    elbo = _vae_objective(x, x_reconstructed, mu, logvar, opt, count)
 
-    log_q, log_q_product = _get_tc_estimates(z, mu, log_std)
+    log_q, log_q_product = _get_tc_estimates(z, mu, logvar)
     total_correlation = (log_q - log_q_product).mean()
 
-    return elbo + total_correlation
+    return elbo + opt.btc_regularizer * total_correlation
 
 
-def _get_tc_estimates(z, mu, log_std):
+def _get_tc_estimates(z, mu, logvar, is_mss=False):
     batch_size, latent_dim = z.shape
 
+    mat_log_q = _matrix_log_density_normal(z, mu, logvar)
 
-    return log_g, log_q_product
+    if is_mss:
+        # use stratification
+        log_iw_mat = _log_importance_weight_matrix(batch_size, n_data).to(latent_sample.device)
+        mat_log_q = mat_log_q + log_iw_mat.view(batch_size, batch_size, 1)
+
+    log_q = torch.logsumexp(mat_log_q.sum(2), dim=1, keepdim=False)
+    log_q_product = torch.logsumexp(mat_log_q, dim=1, keepdim=False).sum(1)
+
+    return log_q, log_q_product
 
 
-def linear_annealing(initial, final, step, annealing_steps=0):
+def _log_density_normal(z, mu, logvar):
+    normalization = - 0.5 * (math.log(2 * math.pi) + logvar)
+    inv_var = torch.exp(-logvar)
+    log_density = normalization - 0.5 * ((z - mu) ** 2 * inv_var)
+    return log_density
+
+
+def _matrix_log_density_normal(z, mu, logvar):
+    batch_size, dim = z.shape
+    z = z.view(batch_size, 1, dim)
+    mu = mu.view(1, batch_size, dim)
+    logvar = logvar.view(1, batch_size, dim)
+    return _log_density_normal(z, mu, logvar)
+
+
+def _log_importance_weight_matrix(batch_size, dataset_size):
+    n = dataset_size
+    m = batch_size - 1
+    strat_weight = (n - m) / (n * m)
+    w = torch.Tensor(batch_size, batch_size).fill_(1 / m)
+    w.view(-1)[::m + 1] = 1 / n
+    w.view(-1)[1::m + 1] = strat_weight
+    w[m - 1, 0] = strat_weight
+    return w.log()
+
+
+def _linear_annealing(initial, final, step, annealing_steps=0):
     if annealing_steps == 0:
         return final
     assert final > initial
     delta = final - initial
     annealed = min(initial + delta * step / annealing_steps, final)
     return annealed
-
-
