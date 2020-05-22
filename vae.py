@@ -44,7 +44,7 @@ class Vae(nn.Module):
 
     def forward(self, x):
         mu, log_std = self._encode(x)
-        z = reparameterize(mu=mu, log_std=log_std)
+        z = reparameterize(mu=mu, logvar=log_std)
         self.mu = mu
         self.std = log_std
         return self._decode(z), mu, log_std
@@ -154,7 +154,7 @@ class ConvVAE(nn.Module):
 
         self.opt = opt
         self.mu = 0
-        self.std = 0
+        self.logvar = 0
         self.current_training_iteration = 0
 
     def _encode(self, x):
@@ -170,13 +170,14 @@ class ConvVAE(nn.Module):
         return torch.sigmoid(self.decode(x))
 
     def forward(self, x):
-        mu, log_std = self._encode(x)
-        z = reparameterize(mu=mu, log_std=log_std)
+        mu, logvar = self._encode(x)
+        z = reparameterize(mu=mu, logvar=logvar)
         self.mu = mu
-        self.std = log_std
-        return self._decode(z), mu, log_std, z
+        self.logvar = logvar
+        return self._decode(z), mu, logvar, z
 
-    def sample(self, mu, std):
+    def sample(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
         epsilon = torch.randn_like(std)
         z = mu + epsilon * std
         return self.decode(z)
@@ -204,8 +205,8 @@ class Discriminator(nn.Module):
         return self.net(z).squeeze()
 
 
-def reparameterize(mu, log_std):
-    std = torch.exp(0.5 * log_std)
+def reparameterize(mu, logvar):
+    std = torch.exp(0.5 * logvar)
     epsilon = torch.randn_like(std)
     return mu + epsilon * std
 

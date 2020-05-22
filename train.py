@@ -88,7 +88,7 @@ def train(dataloader):
     vae.train()
     train_loss = 0
     mu = None
-    std = None
+    logvar = None
     dimension_kld_sum = torch.zeros(10, device=device)
 
     for batch_idx, data in enumerate(dataloader):
@@ -96,9 +96,9 @@ def train(dataloader):
         data = data.to(device)
 
         data = data.view(opt.batch_size, opt.channels, opt.resolution, opt.resolution)
-        reconstruction, mu, std, z = vae(data)
+        reconstruction, mu, logvar, z = vae(data)
 
-        loss_value = get_loss(data, reconstruction, mu, std, opt, z, discriminator)
+        loss_value = get_loss(data, reconstruction, mu, logvar, opt, z, discriminator)
 
         loss_value.backward(retain_graph=True)
         train_loss += loss_value.item()
@@ -114,7 +114,7 @@ def train(dataloader):
 
         optimizer.step()
 
-    return train_loss, mu, std, dimension_kld_sum
+    return train_loss, mu, logvar, dimension_kld_sum
 
 
 def test(dataloader):
@@ -132,7 +132,7 @@ def test(dataloader):
 def run():
     dimension_kld_sum = None
     for epoch in range(opt.n_epoch):
-        train_loss, mu, std, dimension_kld_sum = train(train_dataloader)
+        train_loss, mu, logvar, dimension_kld_sum = train(train_dataloader)
         if bool(opt.test):
             losses_test.append(test(test_dataloader))
         losses_train.append(train_loss / n)
@@ -141,7 +141,7 @@ def run():
         )
         if opt.store_samples:
             with torch.no_grad():
-                sample, dim = vae.sample(mu, std)
+                sample, dim = vae.sample(mu, logvar)
                 os.makedirs(out_path + "/samples", exist_ok=True)
                 batch_size = sample.shape[0]
                 save_image(
