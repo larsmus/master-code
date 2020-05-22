@@ -155,13 +155,14 @@ class ConvVAE(nn.Module):
         self.opt = opt
         self.mu = 0
         self.std = 0
+        self.current_training_iteration = 0
 
     def _encode(self, x):
         # compute the mean and standard deviation each size 'batch size x z_dim'
         # compute fist log and then take the exponential for std to ensure that it is positive
         encoded = self.encode(x)
-        z_loc = encoded[:, : self.opt.latent_dim]
-        z_scale = encoded[:, self.opt.latent_dim :]
+        z_loc = encoded[:, :self.opt.latent_dim]
+        z_scale = encoded[:, self.opt.latent_dim:]
         return z_loc, z_scale
 
     def _decode(self, x):
@@ -173,14 +174,14 @@ class ConvVAE(nn.Module):
         z = reparameterize(mu=mu, log_std=log_std)
         self.mu = mu
         self.std = log_std
-        return self._decode(z), mu, log_std
+        return self._decode(z), mu, log_std, z
 
     def sample(self, mu, std):
         epsilon = torch.randn_like(std)
         z = mu + epsilon * std
         return self.decode(z)
 
-    def loss(self, x, x_reconstructed, mu, log_std, epoch, distribution="bernoulli", annealing=False):
+    def loss(self, x, x_reconstructed, mu, log_std, distribution="bernoulli", annealing=False):
         # Compute ELBO.
         batch_size = x.size(0)
         if distribution == "bernoulli":
@@ -204,14 +205,60 @@ class ConvVAE(nn.Module):
 
         reconstruction = reconstruction / batch_size
 
+        self.current_training_iteration += 1
+
         # KL term regularizing between variational distribution and prior. Using closed form.
         # See https://arxiv.org/pdf/1312.6114.pdf Appendix B and C for details.
         kld = -0.5 * (1 + log_std - mu.pow(2) - log_std.exp())
-        total_kld = kld.sum(1).mean(0, True)
+        posterior_kl = kld.sum(1).mean(0, True)
+
+        if self.opt.loss == "vae":
+            pass
+
+        elif self.opt.loss == "beta_vae_1":
+            anneal_reg = linear_annealing(0, 1, self.current_training_iteration, self.opt.annealing_steps) if annealing else 1
+            posterior_kl = anneal_reg * self.opt.beta_regularizer * posterior_kl
+            pass
+
+        elif self.opt.loss == "beta_vae_2":
+            anneal_C = linear_annealing(self.opt.C_initial, self.opt.C_final, self.current_training_iteration, self.opt.annealing_steps)
+            posterior_kl = self.opt.gamma * (posterior_kl - anneal_C).abs()
+            pass
+
+        elif self.opt.loss == "factor_vae":
+            # define the discriminator
+            # use it to compute the loss
+            agg_posterior = None
+            regularization = posterior_kl + self.factor_penalty * agg_posterior
+
+        else:
+            raise ValueError("The loss is not implemented.")
+
         dim_kld = kld.sum(0)
-        anneal_reg = linear_annealing(1, self.opt.beta_regularizer, epoch, self.opt.n_epoch) if annealing else 1
-        loss = reconstruction + anneal_reg * total_kld
+        loss = reconstruction + regularization
         return loss, dim_kld
+
+
+class Discriminator(nn.Module):
+    def __init__(self, z_dim):
+        super(Discriminator, self).__init__()
+        self.z_dim = z_dim
+        self.net = nn.Sequential(
+            nn.Linear(z_dim, 1000),
+            nn.LeakyReLU(0.2, True),
+            nn.Linear(1000, 1000),
+            nn.LeakyReLU(0.2, True),
+            nn.Linear(1000, 1000),
+            nn.LeakyReLU(0.2, True),
+            nn.Linear(1000, 1000),
+            nn.LeakyReLU(0.2, True),
+            nn.Linear(1000, 1000),
+            nn.LeakyReLU(0.2, True),
+            nn.Linear(1000, 2),
+        )
+
+    def forward(self, z):
+        return self.net(z).squeeze()
 
 
 def reparameterize(mu, log_std):
@@ -220,12 +267,5 @@ def reparameterize(mu, log_std):
     return mu + epsilon * std
 
 
-def linear_annealing(initial, final, step, annealing_steps):
-    if annealing_steps == 0:
-        return final
-    assert final > initial
-    delta = final - initial
-    annealed = min(initial + delta * step / annealing_steps, final)
-    return annealed
 
 

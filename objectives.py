@@ -2,15 +2,15 @@ import torch.nn.functional as F
 import torch
 
 
-def get_loss(x, x_reconstructed, mu, log_std, opt, count, discriminator=None, z=None):
+def get_loss(x, x_reconstructed, mu, log_std, opt, z,  discriminator, count=1):
     if opt.model == "vae":
         return vae_objective(x, x_reconstructed, mu, log_std, opt, count)
     elif opt.model == "b_vae_2":
         return b_vae_objective2(x, x_reconstructed, mu, log_std, opt, count)
     elif opt.model == "factor_vae":
-        return factor_vae_objective(x, x_reconstructed, mu, log_std, opt, discriminator, z)
+        return factor_vae_objective(x, x_reconstructed, mu, log_std, opt, discriminator, z, count)
     else:
-        raise NotImplementedError("Uknown loss function")
+        raise NotImplementedError("Unknown loss function")
 
 
 def _reconstruction(x, x_reconstructed, opt, distribution="bernoulli"):
@@ -51,19 +51,23 @@ def b_vae_objective2(x, x_reconstructed, mu, log_std, opt, count):
     return _reconstruction(x, x_reconstructed, opt) + opt.gamma * (kl_divergence(mu, log_std) - annealing_c).abs()
 
 
-def factor_vae_objective(x, x_reconstructed, mu, log_std, opt, discriminator, z):
+def factor_vae_objective(x, x_reconstructed, mu, log_std, opt, discriminator, z, count):
     log_probability = discriminator(z)
     total_correlation = (log_probability[:, :1] - log_probability[:, 1:]).mean()
-    return vae_objective(x, x_reconstructed, mu, log_std, opt) + opt.factor_reg * total_correlation
+    return vae_objective(x, x_reconstructed, mu, log_std, opt, count) + opt.factor_regularizer * total_correlation
 
 
-def factor_vae_discriminator_loss(z, discriminator, dataloader, vae, opt):
-    ones = torch.ones(opt.batch_size, dtype=torch.long, device=opt.device)
-    zeros = torch.zeros(opt.batch_size, dtype=torch.long, device=opt.device)
+def factor_vae_discriminator_loss(z, discriminator, dataloader, vae, opt, device):
+    ones = torch.ones(opt.batch_size, dtype=torch.long, device=device)
+    zeros = torch.zeros_like(ones)
 
     x_new = next(iter(dataloader))
+    x_new = x_new.view(opt.batch_size, opt.channels, opt.resolution, opt.resolution)
+    x_new = x_new.to(device)
+
     _, _, _, z_new = vae(x_new)
     z_permute = _permute_dims(z_new)
+
     log_probability_permute = discriminator(z_permute)
     log_probability = discriminator(z)
     return 0.5 * (F.cross_entropy(log_probability, zeros) + F.cross_entropy(log_probability_permute, ones))
