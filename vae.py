@@ -181,63 +181,6 @@ class ConvVAE(nn.Module):
         z = mu + epsilon * std
         return self.decode(z)
 
-    def loss(self, x, x_reconstructed, mu, log_std, distribution="bernoulli", annealing=False):
-        # Compute ELBO.
-        batch_size = x.size(0)
-        if distribution == "bernoulli":
-            # Can use BCE sine we use sigmoid in decoder to output Bernoulli probabilities
-            reconstruction = F.binary_cross_entropy(
-                x_reconstructed, x.view(-1, self.opt.input_dim), reduction="sum"
-            )
-
-        elif distribution == "gaussian":
-            reconstruction = (
-                F.mse_loss(
-                    x_reconstructed * 255,
-                    x.view(-1, self.opt.input_dim) * 255,
-                    reduction="sum",
-                )
-                / 255
-            )
-
-        else:
-            raise ValueError("Unknown distribution")
-
-        reconstruction = reconstruction / batch_size
-
-        self.current_training_iteration += 1
-
-        # KL term regularizing between variational distribution and prior. Using closed form.
-        # See https://arxiv.org/pdf/1312.6114.pdf Appendix B and C for details.
-        kld = -0.5 * (1 + log_std - mu.pow(2) - log_std.exp())
-        posterior_kl = kld.sum(1).mean(0, True)
-
-        if self.opt.loss == "vae":
-            pass
-
-        elif self.opt.loss == "beta_vae_1":
-            anneal_reg = linear_annealing(0, 1, self.current_training_iteration, self.opt.annealing_steps) if annealing else 1
-            posterior_kl = anneal_reg * self.opt.beta_regularizer * posterior_kl
-            pass
-
-        elif self.opt.loss == "beta_vae_2":
-            anneal_C = linear_annealing(self.opt.C_initial, self.opt.C_final, self.current_training_iteration, self.opt.annealing_steps)
-            posterior_kl = self.opt.gamma * (posterior_kl - anneal_C).abs()
-            pass
-
-        elif self.opt.loss == "factor_vae":
-            # define the discriminator
-            # use it to compute the loss
-            agg_posterior = None
-            regularization = posterior_kl + self.factor_penalty * agg_posterior
-
-        else:
-            raise ValueError("The loss is not implemented.")
-
-        dim_kld = kld.sum(0)
-        loss = reconstruction + regularization
-        return loss, dim_kld
-
 
 class Discriminator(nn.Module):
     def __init__(self, z_dim):

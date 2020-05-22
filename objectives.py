@@ -86,6 +86,22 @@ def _permute_dims(z):
     return torch.cat(z_permute, 1)
 
 
+def btc_vae_objective(x, x_reconstructed, mu, log_std, opt, z, count):
+    elbo = vae_objective(x, x_reconstructed, mu, log_std, opt, count)
+
+    log_q, log_q_product = _get_tc_estimates(z, mu, log_std)
+    total_correlation = (log_q - log_q_product).mean()
+
+    return elbo + total_correlation
+
+
+def _get_tc_estimates(z, mu, log_std):
+    batch_size, latent_dim = z.shape
+
+
+    return log_g, log_q_product
+
+
 def linear_annealing(initial, final, step, annealing_steps=0):
     if annealing_steps == 0:
         return final
