@@ -16,7 +16,7 @@ def get_loss(x, x_reconstructed, mu, logvar, opt, z, discriminator, count=1):
         raise NotImplementedError("Unknown loss function")
 
 
-def _reconstruction(x, x_reconstructed, opt, distribution="bernoulli"):
+def reconstruction(x, x_reconstructed, opt, distribution="bernoulli"):
     batch_size = x.size(0)
     if distribution == "bernoulli":
         return F.binary_cross_entropy(
@@ -41,23 +41,28 @@ def _kl_divergence(mu, logvar):
 
 def dimension_kld(mu, logvar):
     kld = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
-    return kld.sum(0)
+    return kld
 
 
 def _vae_objective(x, x_reconstructed, mu, logvar, opt, count):
-    annealing_c = _linear_annealing(opt.C_initial, opt.C_final, count, opt.annealing_steps)
-    return _reconstruction(x, x_reconstructed, opt) + annealing_c * opt.beta_regularizer * _kl_divergence(mu, logvar)
+    annealing_c = _linear_annealing(0, 1, count, 0)
+    reconstruction_error = reconstruction(x, x_reconstructed, opt)
+    kl_divergence = _kl_divergence(mu, logvar)
+    return reconstruction_error + annealing_c * opt.beta_regularizer * kl_divergence, reconstruction_error, kl_divergence, torch.tensor(0)
 
 
 def _b_vae_objective2(x, x_reconstructed, mu, logvar, opt, count):
     annealing_c = _linear_annealing(opt.C_initial, opt.C_final, count, opt.annealing_steps)
-    return _reconstruction(x, x_reconstructed, opt) + opt.gamma * (_kl_divergence(mu, logvar) - annealing_c).abs()
+    reconstruction_error = reconstruction(x, x_reconstructed, opt)
+    kl_divergence = _kl_divergence(mu, logvar)
+    return reconstruction_error + opt.gamma * (kl_divergence - annealing_c).abs(), reconstruction_error, kl_divergence, torch.tensor(0)
 
 
 def _factor_vae_objective(x, x_reconstructed, mu, logvar, opt, discriminator, z, count):
     log_probability = discriminator(z)
     total_correlation = (log_probability[:, :1] - log_probability[:, 1:]).mean()
-    return _vae_objective(x, x_reconstructed, mu, logvar, opt, count) + opt.factor_regularizer * total_correlation
+    vae_objective, reconstruction_error, kl_divergence, _ = _vae_objective(x, x_reconstructed, mu, logvar, opt, count)
+    return vae_objective + opt.factor_regularizer * total_correlation, reconstruction_error, kl_divergence, total_correlation
 
 
 def factor_vae_discriminator_loss(z, discriminator, dataloader, vae, opt, device):
@@ -90,12 +95,12 @@ def _permute_dims(z):
 
 
 def _btc_vae_objective(x, x_reconstructed, mu, logvar, opt, z, count):
-    elbo = _vae_objective(x, x_reconstructed, mu, logvar, opt, count)
+    vae_objective, reconstruction_error, kl_divergence, _ = _vae_objective(x, x_reconstructed, mu, logvar, opt, count)
 
     log_q, log_q_product = _get_tc_estimates(z, mu, logvar)
     total_correlation = (log_q - log_q_product).mean()
 
-    return elbo + opt.btc_regularizer * total_correlation
+    return vae_objective + opt.btc_regularizer * total_correlation, reconstruction_error, kl_divergence, total_correlation
 
 
 def _get_tc_estimates(z, mu, logvar, is_mss=False):

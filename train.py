@@ -50,7 +50,7 @@ def parse():
 
     model = parser.add_argument_group("Model options")
     model.add_argument(
-        "--model", type=str, default="btc_vae", help="which model to run"
+        "--model", type=str, default="vae", help="which model to run"
     )
     model.add_argument(
         "--resolution", type=int, default=64, help="resolution of image"
@@ -68,7 +68,7 @@ def parse():
     beta_vae_1.add_argument(
         "--beta_regularizer", type=float, default=1.0, help="beta in beta-VAE"
     )
-    beta_vae_1.add_argument("--annealing_steps", type=int, default=10000, help="Use annealing on beta or not")
+    beta_vae_1.add_argument("--annealing_steps", type=int, default=0, help="Use annealing on beta or not")
     beta_vae_1.add_argument("--beta_annealing", type=int, default=0, help="Use annealing on beta or not")
 
     beta_vae_2 = parser.add_argument_group("Loss options for beta-vae, second version")
@@ -87,9 +87,13 @@ def parse():
     return parser.parse_args()
 
 
-def train(dataloader):
+def train(dataloader, epoch):
     vae.train()
     train_loss = 0
+    recon_epoch = 0
+    kl_epoch = 0
+    tc_epoch = 0
+
     mu = None
     logvar = None
     dimension_kld_sum = torch.zeros(10, device=device)
@@ -99,12 +103,15 @@ def train(dataloader):
         data = data.to(device)
 
         data = data.view(opt.batch_size, opt.channels, opt.resolution, opt.resolution)
-        reconstruction, mu, logvar, z = vae(data)
+        x_reconstructed, mu, logvar, z = vae(data)
 
-        loss_value = get_loss(data, reconstruction, mu, logvar, opt, z, discriminator)
+        loss_value, recon, kl, tc = get_loss(data, x_reconstructed, mu, logvar, opt, z, discriminator)
 
-        loss_value.backward(retain_graph=True)
+        loss_value.backward()
         train_loss += loss_value.item()
+        recon_epoch += recon.item()
+        kl_epoch += kl.item()
+        tc_epoch += tc.item()
 
         if opt.model == "factor_vae":
             optimizer_d.zero_grad()
@@ -112,12 +119,13 @@ def train(dataloader):
             d_loss.backward()
             optimizer_d.step()
 
-        dimension_kld_batch = dimension_kld(mu, logvar)
-        dimension_kld_sum += dimension_kld_batch
+        if epoch == opt.n_epoch:
+            dimension_kld_batch = dimension_kld(mu, logvar)
+            dimension_kld_sum += dimension_kld_batch
 
         optimizer.step()
 
-    return train_loss, mu, logvar, dimension_kld_sum
+    return train_loss, mu, logvar, dimension_kld_sum, recon_epoch, kl_epoch, tc_epoch
 
 
 def test(dataloader):
@@ -126,22 +134,31 @@ def test(dataloader):
     with torch.no_grad():
         for batch_idx, data in enumerate(dataloader):
             data = data.to(device)
-            reconstruction, mu, logvar = vae(data)
-            loss_value = vae.loss(data, reconstruction, mu, logvar)
+            x_reconstructed, mu, logvar = vae(data)
+            loss_value = vae.loss(data, x_reconstructed, mu, logvar)
             test_loss += loss_value.item()
     return test_loss
 
 
 def run():
+
     dimension_kld_sum = None
+
     for epoch in range(opt.n_epoch):
-        train_loss, mu, logvar, dimension_kld_sum = train(train_dataloader)
+        train_loss, mu, logvar, dimension_kld_sum, recon_epoch, kl_epoch, tc_epoch = train(train_dataloader, epoch)
+
         if bool(opt.test):
-            losses_test.append(test(test_dataloader))
+            losses_test.append(test(test_dataloader)
+                               )
         losses_train.append(train_loss / n)
+        reconstruction_error.append(recon_epoch / n)
+        kl_divergence.append(kl_epoch / n)
+        total_correlation.append(tc_epoch / n)
+
         print(
             f"[Epoch {epoch + 1:04}/{opt.n_epoch:04}] [Train loss: {train_loss / n:.2f}]"
         )
+
         if opt.store_samples:
             with torch.no_grad():
                 sample, dim = vae.sample(mu, logvar)
@@ -169,7 +186,7 @@ if __name__ == "__main__":
     if opt.model == "factor_vae":
         parameter = opt.factor_regularizer
     elif opt.model == "vae":
-        parameter = "opt.beta_regularizer"
+        parameter = opt.beta_regularizer
     else:
         parameter = 0
 
@@ -196,6 +213,9 @@ if __name__ == "__main__":
     optimizer_d = optim.Adam(discriminator.parameters(), lr=opt.lrd, betas=(opt.b1d, opt.b2d))
 
     losses_train = []
+    reconstruction_error = []
+    kl_divergence = []
+    total_correlation = []
     losses_test = []
 
     dimension_kld = run()
@@ -210,6 +230,9 @@ if __name__ == "__main__":
             "train_loss": losses_train,
             "opt": opt,
             "dim_kld": dimension_kld,
+            "reconstruction_error": reconstruction_error,
+            "kl_divergence": kl_divergence,
+            "total_correlation": total_correlation,
         },
         out_path + "/model.pt",
     )
