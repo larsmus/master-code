@@ -12,8 +12,25 @@ def get_loss(x, x_reconstructed, mu, logvar, opt, z, discriminator, count=1):
         return _factor_vae_objective(x, x_reconstructed, mu, logvar, opt, discriminator, z, count)
     elif opt.model == "btc_vae":
         return _btc_vae_objective(x, x_reconstructed, mu, logvar, opt, z, count)
+    elif opt.model == "dip_vae":
+        return _dip_vae_objective(x, x_reconstructed, mu, logvar, opt, count)
     else:
         raise NotImplementedError("Unknown loss function")
+
+
+def _dip_vae_objective(x, x_reconstructed, mu, logvar, opt, count):
+    vae_objective, reconstruction_error, kl_divergence, _ = _vae_objective(x, x_reconstructed, mu, logvar, opt, count)
+
+    centered_mu = mu - mu.mean(dim=1, keepdim=True)
+    cov_mu = centered_mu.t().matmul(centered_mu).squeeze()
+
+    cov_z = cov_mu + torch.mean(torch.diagonal((2. * logvar).exp(), dim1=0), dim=0)
+    cov_diag = torch.diag(cov_z)
+    cov_off_diag = cov_z - torch.diag(cov_diag)
+
+    dip_loss = opt.lambda_offdiag * torch.sum(cov_off_diag ** 2) + opt.lambda_diag * torch.sum((cov_diag - 1) ** 2)
+
+    return vae_objective + dip_loss, reconstruction_error, kl_divergence, dip_loss
 
 
 def reconstruction(x, x_reconstructed, opt, distribution="bernoulli"):
@@ -41,7 +58,7 @@ def _kl_divergence(mu, logvar):
 
 def dimension_kld(mu, logvar):
     kld = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
-    return kld
+    return kld.sum(0)
 
 
 def _vae_objective(x, x_reconstructed, mu, logvar, opt, count):
