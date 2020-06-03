@@ -1,9 +1,9 @@
-import torchvision.transforms as transforms
+# import torchvision.transforms as transforms
 import torch
 import numpy as np
 import torch.nn as nn
 
-
+"""
 def transform_data(data, opt):
     data = torch.FloatTensor(data.astype("float"))
     transform_list = [
@@ -15,7 +15,7 @@ def transform_data(data, opt):
 
     transform = transforms.Compose(transform_list)
     return transform(data)
-
+"""
 
 class View(nn.Module):
     def __init__(self, size):

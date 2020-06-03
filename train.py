@@ -50,7 +50,7 @@ def parse():
 
     model = parser.add_argument_group("Model options")
     model.add_argument(
-        "--model", type=str, default="vae", help="which model to run"
+        "--model", type=str, default="dip_vae", help="which model to run"
     )
     model.add_argument(
         "--resolution", type=int, default=64, help="resolution of image"
@@ -66,7 +66,7 @@ def parse():
 
     beta_vae_1 = parser.add_argument_group("Loss options for beta-vae, first version")
     beta_vae_1.add_argument(
-        "--beta_regularizer", type=float, default=1.0, help="beta in beta-VAE"
+        "--beta_regularizer", type=float, default=1.1, help="beta in beta-VAE"
     )
     beta_vae_1.add_argument("--annealing_steps", type=int, default=0, help="Use annealing on beta or not")
     beta_vae_1.add_argument("--beta_annealing", type=int, default=0, help="Use annealing on beta or not")
@@ -84,6 +84,10 @@ def parse():
 
     btc_vae = parser.add_argument_group("Loss options for bet-tc-vae")
     btc_vae.add_argument("--btc_regularizer", type=int, default=5, help="Regularizer on TC term")
+
+    dip_vae = parser.add_argument_group("Loss options for dip-vae")
+    dip_vae.add_argument("--lambda_diag", type=int, default=5, help="Regularizer on diagonal term")
+    dip_vae.add_argument("--lambda_offdiag", type=int, default=5, help="Regularizer on off-diagonal term")
     return parser.parse_args()
 
 
@@ -107,20 +111,27 @@ def train(dataloader, epoch):
 
         loss_value, recon, kl, tc = get_loss(data, x_reconstructed, mu, logvar, opt, z, discriminator)
 
-        loss_value.backward()
-        train_loss += loss_value.item()
         recon_epoch += recon.item()
         kl_epoch += kl.item()
         tc_epoch += tc.item()
 
         if opt.model == "factor_vae":
+            loss_value.backward(retain_graph=True)
+            train_loss += loss_value.item()
+
             optimizer_d.zero_grad()
             d_loss = factor_vae_discriminator_loss(z, discriminator, dataloader, vae, opt, device)
+            discriminator_loss.append(d_loss.item())
             d_loss.backward()
             optimizer_d.step()
 
-        if epoch == opt.n_epoch:
+        else:
+            loss_value.backward()
+            train_loss += loss_value.item()
+
+        if epoch == (opt.n_epoch - 1):
             dimension_kld_batch = dimension_kld(mu, logvar)
+            print(dimension_kld_batch.size())
             dimension_kld_sum += dimension_kld_batch
 
         optimizer.step()
@@ -187,6 +198,10 @@ if __name__ == "__main__":
         parameter = opt.factor_regularizer
     elif opt.model == "vae":
         parameter = opt.beta_regularizer
+    elif opt.model == "btc_vae":
+        parameter = opt.btc_regularizer
+    elif opt.model == "dip_vae":
+        parameter = opt.lambda_diag
     else:
         parameter = 0
 
@@ -216,6 +231,7 @@ if __name__ == "__main__":
     reconstruction_error = []
     kl_divergence = []
     total_correlation = []
+    discriminator_loss = []
     losses_test = []
 
     dimension_kld = run()
@@ -233,6 +249,8 @@ if __name__ == "__main__":
             "reconstruction_error": reconstruction_error,
             "kl_divergence": kl_divergence,
             "total_correlation": total_correlation,
+            "discriminator_loss:": discriminator_loss,
         },
         out_path + "/model.pt",
     )
+

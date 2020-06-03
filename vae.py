@@ -157,7 +157,7 @@ class ConvVAE(nn.Module):
         self.logvar = 0
         self.current_training_iteration = 0
 
-    def _encode(self, x):
+    def encoder(self, x):
         # compute the mean and standard deviation each size 'batch size x z_dim'
         # compute fist log and then take the exponential for std to ensure that it is positive
         encoded = self.encode(x)
@@ -165,22 +165,22 @@ class ConvVAE(nn.Module):
         z_scale = encoded[:, self.opt.latent_dim:]
         return z_loc, z_scale
 
-    def _decode(self, x):
+    def decoder(self, x):
         # ensure output in [0,1] domain
         return torch.sigmoid(self.decode(x))
 
     def forward(self, x):
-        mu, logvar = self._encode(x)
+        mu, logvar = self.encoder(x)
         z = reparameterize(mu=mu, logvar=logvar)
         self.mu = mu
         self.logvar = logvar
-        return self._decode(z), mu, logvar, z
+        return self.decode(z), mu, logvar, z
 
     def sample(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
         epsilon = torch.randn_like(std)
         z = mu + epsilon * std
-        return self.decode(z)
+        return self.decoder(z)
 
 
 class Discriminator(nn.Module):
