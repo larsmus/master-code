@@ -49,12 +49,8 @@ def parse():
     training.add_argument("--b2_d", type=float, default=0.9, help="parameter in Adam")
 
     model = parser.add_argument_group("Model options")
-    model.add_argument(
-        "--model", type=str, default="dip_vae", help="which model to run"
-    )
-    model.add_argument(
-        "--resolution", type=int, default=64, help="resolution of image"
-    )
+    model.add_argument("--model", type=str, default="vae", help="which model to run")
+    model.add_argument("--resolution", type=int, default=64, help="resolution of image")
     model.add_argument(
         "--input_dim", type=int, default=64 * 64, help="dimension of input space"
     )
@@ -62,32 +58,48 @@ def parse():
         "--latent_dim", type=int, default=10, help="dimension of latent space"
     )
     model.add_argument("--channels", type=int, default=1, help="Number of channels")
-    model.add_argument("--loss", type=str, default="beta_vae_2", help="Which loss function to use")
+    model.add_argument(
+        "--loss", type=str, default="beta_vae_2", help="Which loss function to use"
+    )
 
     beta_vae_1 = parser.add_argument_group("Loss options for beta-vae, first version")
     beta_vae_1.add_argument(
-        "--beta_regularizer", type=float, default=1.1, help="beta in beta-VAE"
+        "--beta_regularizer", type=float, default=5, help="beta in beta-VAE"
     )
-    beta_vae_1.add_argument("--annealing_steps", type=int, default=0, help="Use annealing on beta or not")
-    beta_vae_1.add_argument("--beta_annealing", type=int, default=0, help="Use annealing on beta or not")
+    beta_vae_1.add_argument(
+        "--annealing_steps", type=int, default=0, help="Use annealing on beta or not"
+    )
+    beta_vae_1.add_argument(
+        "--beta_annealing", type=int, default=0, help="Use annealing on beta or not"
+    )
 
     beta_vae_2 = parser.add_argument_group("Loss options for beta-vae, second version")
-    beta_vae_2.add_argument("--gamma", type=int, default=100, help="Regularizer on KL term")
+    beta_vae_2.add_argument(
+        "--gamma", type=int, default=100, help="Regularizer on KL term"
+    )
     beta_vae_2.add_argument("--C_initial", type=int, default=0, help="Initial capacity")
     beta_vae_2.add_argument("--C_final", type=int, default=25, help="Final capacity")
 
     factor_vae = parser.add_argument_group("Loss options for FactorVAE")
-    factor_vae.add_argument("--factor_regularizer", type=int, default=5, help="Regularizer on TC term")
+    factor_vae.add_argument(
+        "--factor_regularizer", type=int, default=5, help="Regularizer on TC term"
+    )
     factor_vae.add_argument("--lrd", type=float, default=0.0001, help="learning rate")
     factor_vae.add_argument("--b1d", type=float, default=0.5, help="parameter in Adam")
     factor_vae.add_argument("--b2d", type=float, default=0.9, help="parameter in Adam")
 
     btc_vae = parser.add_argument_group("Loss options for bet-tc-vae")
-    btc_vae.add_argument("--btc_regularizer", type=int, default=5, help="Regularizer on TC term")
+    btc_vae.add_argument(
+        "--btc_regularizer", type=int, default=5, help="Regularizer on TC term"
+    )
 
     dip_vae = parser.add_argument_group("Loss options for dip-vae")
-    dip_vae.add_argument("--lambda_diag", type=int, default=5, help="Regularizer on diagonal term")
-    dip_vae.add_argument("--lambda_offdiag", type=int, default=5, help="Regularizer on off-diagonal term")
+    dip_vae.add_argument(
+        "--lambda_diag", type=int, default=5, help="Regularizer on diagonal term"
+    )
+    dip_vae.add_argument(
+        "--lambda_offdiag", type=int, default=5, help="Regularizer on off-diagonal term"
+    )
     return parser.parse_args()
 
 
@@ -109,7 +121,16 @@ def train(dataloader, epoch):
         data = data.view(opt.batch_size, opt.channels, opt.resolution, opt.resolution)
         x_reconstructed, mu, logvar, z = vae(data)
 
-        loss_value, recon, kl, tc = get_loss(data, x_reconstructed, mu, logvar, opt, z, discriminator)
+        loss_value, recon, kl, tc = get_loss(
+            data,
+            x_reconstructed,
+            mu,
+            logvar,
+            opt,
+            z,
+            discriminator,
+            count=epoch + batch_idx,
+        )
 
         recon_epoch += recon.item()
         kl_epoch += kl.item()
@@ -120,7 +141,9 @@ def train(dataloader, epoch):
             train_loss += loss_value.item()
 
             optimizer_d.zero_grad()
-            d_loss = factor_vae_discriminator_loss(z, discriminator, dataloader, vae, opt, device)
+            d_loss = factor_vae_discriminator_loss(
+                z, discriminator, dataloader, vae, opt, device
+            )
             discriminator_loss.append(d_loss.item())
             d_loss.backward()
             optimizer_d.step()
@@ -131,7 +154,6 @@ def train(dataloader, epoch):
 
         if epoch == (opt.n_epoch - 1):
             dimension_kld_batch = dimension_kld(mu, logvar)
-            print(dimension_kld_batch.size())
             dimension_kld_sum += dimension_kld_batch
 
         optimizer.step()
@@ -156,11 +178,12 @@ def run():
     dimension_kld_sum = None
 
     for epoch in range(opt.n_epoch):
-        train_loss, mu, logvar, dimension_kld_sum, recon_epoch, kl_epoch, tc_epoch = train(train_dataloader, epoch)
+        train_loss, mu, logvar, dimension_kld_sum, recon_epoch, kl_epoch, tc_epoch = train(
+            train_dataloader, epoch
+        )
 
         if bool(opt.test):
-            losses_test.append(test(test_dataloader)
-                               )
+            losses_test.append(test(test_dataloader))
         losses_train.append(train_loss / n)
         reconstruction_error.append(recon_epoch / n)
         kl_divergence.append(kl_epoch / n)
@@ -205,7 +228,9 @@ if __name__ == "__main__":
     else:
         parameter = 0
 
-    out_path = f"../results/{opt.dataset}/{opt.model}/parameter_{parameter}/seed_{opt.seed}"
+    out_path = (
+        f"../results/{opt.dataset}/{opt.model}/parameter_{parameter}/seed_{opt.seed}"
+    )
     os.makedirs(out_path, exist_ok=True)
 
     # check for GPU
@@ -225,7 +250,9 @@ if __name__ == "__main__":
     optimizer = optim.Adam(vae.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
 
     discriminator = Discriminator(opt.latent_dim).to(device)
-    optimizer_d = optim.Adam(discriminator.parameters(), lr=opt.lrd, betas=(opt.b1d, opt.b2d))
+    optimizer_d = optim.Adam(
+        discriminator.parameters(), lr=opt.lrd, betas=(opt.b1d, opt.b2d)
+    )
 
     losses_train = []
     reconstruction_error = []
@@ -253,4 +280,3 @@ if __name__ == "__main__":
         },
         out_path + "/model.pt",
     )
-

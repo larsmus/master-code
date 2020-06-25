@@ -149,7 +149,7 @@ class ConvVAE(nn.Module):
                 out_channels=opt.channels,
                 kernel_size=kernel_size,
                 **cnn_kwargs
-            )
+            ),
         )
 
         self.opt = opt
@@ -161,7 +161,7 @@ class ConvVAE(nn.Module):
         # compute the mean and standard deviation each size 'batch size x z_dim'
         # compute fist log and then take the exponential for std to ensure that it is positive
         encoded = self.encode(x)
-        z_loc = encoded[:, :self.opt.latent_dim]
+        z_loc = encoded[:, : self.opt.latent_dim]
         z_scale = encoded[:, self.opt.latent_dim:]
         return z_loc, z_scale
 
@@ -174,7 +174,7 @@ class ConvVAE(nn.Module):
         z = reparameterize(mu=mu, logvar=logvar)
         self.mu = mu
         self.logvar = logvar
-        return self.decode(z), mu, logvar, z
+        return self.decoder(z), mu, logvar, z
 
     def sample(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -209,7 +209,3 @@ def reparameterize(mu, logvar):
     std = torch.exp(0.5 * logvar)
     epsilon = torch.randn_like(std)
     return mu + epsilon * std
-
-
-
-

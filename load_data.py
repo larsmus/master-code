@@ -16,7 +16,11 @@ def get_dataloader(opt):
                 train=True,
                 download=True,
                 transform=transforms.Compose(
-                    [transforms.Resize(img_size), transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]
+                    [
+                        transforms.Resize(img_size),
+                        transforms.ToTensor(),
+                        transforms.Normalize([0.5], [0.5]),
+                    ]
                 ),
             ),
             batch_size=opt.batch_size,
@@ -29,7 +33,11 @@ def get_dataloader(opt):
                 train=False,
                 download=True,
                 transform=transforms.Compose(
-                    [transforms.Resize(img_size), transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]
+                    [
+                        transforms.Resize(img_size),
+                        transforms.ToTensor(),
+                        transforms.Normalize([0.5], [0.5]),
+                    ]
                 ),
             ),
             batch_size=opt.batch_size,
@@ -49,13 +57,11 @@ def get_dataloader(opt):
 
 class SpritesDataset(Dataset):
     def __init__(self, dataset_path):
-        dataset_zip = np.load(dataset_path, encoding='latin1')
-        self.imgs = dataset_zip['imgs']
+        dataset_zip = np.load(dataset_path, encoding="latin1")
+        self.imgs = dataset_zip["imgs"]
 
     def __len__(self):
         return self.imgs.shape[0]
 
     def __getitem__(self, idx):
         return self.imgs[idx].astype(np.float32)
-
-

@@ -17,6 +17,7 @@ def transform_data(data, opt):
     return transform(data)
 """
 
+
 class View(nn.Module):
     def __init__(self, size):
         super(View, self).__init__()
